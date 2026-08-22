@@ -5,14 +5,14 @@ import { AuthService } from '../../core/auth/auth-service';
 import { Article } from '../../core/models/article';
 import { Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
-import { DatePipe, NgClass } from '@angular/common';
+import { NgClass } from '@angular/common';
 import { ArticlePreviewComponent } from '../../shared/ui/article-preview/article-preview';
 import { finalize, tap } from 'rxjs';
 import { toObservable } from '@angular/core/rxjs-interop';
 
 @Component({
   selector: 'app-profile',
-  imports: [RouterLink, DatePipe, NgClass, ArticlePreviewComponent],
+  imports: [RouterLink, NgClass, ArticlePreviewComponent],
   templateUrl: './profile-page.html',
   styleUrl: './profile-page.css',
 })

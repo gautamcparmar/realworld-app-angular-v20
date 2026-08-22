@@ -1,0 +1,29 @@
+version: 0.2
+
+env:
+  variables:
+    CI: "true"
+    NG_CLI_ANALYTICS: "false"
+  exported-variables:
+    - ARTIFACT_VERSION
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 22
+    commands:
+      - npm ci --no-audit --no-fund
+  build:
+    commands:
+      - bash scripts/build.sh
+      - export ARTIFACT_VERSION="$(tr -d '[:space:]' < artifacts/revision.txt)"
+
+artifacts:
+  files:
+    - artifacts/**/*
+    - scripts/deploy.sh
+  name: realworld-app-build
+
+cache:
+  paths:
+    - /root/.npm/**/*

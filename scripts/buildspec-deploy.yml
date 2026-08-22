@@ -1,0 +1,10 @@
+version: 0.2
+
+env:
+  variables:
+    WAIT_FOR_DISTRIBUTION: "true"
+
+phases:
+  build:
+    commands:
+      - bash scripts/deploy.sh
