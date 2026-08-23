@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploy a zipped artifact: S3 version prefix + CloudFront origin path + invalidation.
 #
-# Required: ENVIRONMENT (stage|production), SSM_BASE_PATH (no trailing slash)
+# Required: ENVIRONMENT (stage|production), SSM_BASE_PATH (no trailing slash), ARTIFACT_BUCKET
 # Optional: ARTIFACT_VERSION, ARTIFACT_PATH, CLOUDFRONT_ORIGIN_ID,
 #           WAIT_FOR_DISTRIBUTION (default true), WAIT_FOR_INVALIDATION (true on production)
 #
@@ -32,6 +32,7 @@ need_cmd jq
 need_cmd unzip
 need_env ENVIRONMENT
 need_env SSM_BASE_PATH
+need_env ARTIFACT_BUCKET
 
 [[ "${ENVIRONMENT}" == "stage" || "${ENVIRONMENT}" == "production" ]] \
   || die "ENVIRONMENT must be 'stage' or 'production'"
@@ -45,23 +46,30 @@ if [[ "${ENVIRONMENT}" == "production" ]]; then
   WAIT_FOR_INVALIDATION="${WAIT_FOR_INVALIDATION:-true}"
 fi
 
-ZIP="${ARTIFACT_PATH:-${ROOT}/artifacts/frontend.zip}"
-[[ -f "${ZIP}" ]] || ZIP="${ROOT}/frontend.zip"
-[[ -f "${ZIP}" ]] || die "frontend.zip not found. Set ARTIFACT_PATH."
-
 if [[ -z "${ARTIFACT_VERSION:-}" && -f "${ROOT}/artifacts/revision.txt" ]]; then
   ARTIFACT_VERSION="$(tr -d '[:space:]' < "${ROOT}/artifacts/revision.txt")"
 fi
-if [[ -z "${ARTIFACT_VERSION:-}" && -f "$(dirname "${ZIP}")/revision.txt" ]]; then
-  ARTIFACT_VERSION="$(tr -d '[:space:]' < "$(dirname "${ZIP}")/revision.txt")"
+if [[ -z "${ARTIFACT_VERSION:-}" ]]; then
+  ARTIFACT_VERSION="$(aws s3 cp "s3://${ARTIFACT_BUCKET}/revisions/latest.txt" - 2>/dev/null | tr -d '[:space:]')" \
+    || die "ARTIFACT_VERSION is not set and s3://${ARTIFACT_BUCKET}/revisions/latest.txt was not found"
 fi
-[[ -n "${ARTIFACT_VERSION:-}" ]] || die "ARTIFACT_VERSION is required (or provide artifacts/revision.txt)"
+[[ -n "${ARTIFACT_VERSION}" ]] || die "ARTIFACT_VERSION is required"
 [[ "${ARTIFACT_VERSION}" =~ ^[A-Za-z0-9._-]+$ ]] || die "Invalid ARTIFACT_VERSION: ${ARTIFACT_VERSION}"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "${WORK}"' EXIT
 SITE="${WORK}/site"
+ZIP="${WORK}/frontend.zip"
 mkdir -p "${SITE}"
+
+if [[ -n "${ARTIFACT_PATH:-}" && -f "${ARTIFACT_PATH}" ]]; then
+  cp "${ARTIFACT_PATH}" "${ZIP}"
+else
+  REMOTE_ZIP="s3://${ARTIFACT_BUCKET}/revisions/${ARTIFACT_VERSION}/frontend.zip"
+  log "Downloading ${REMOTE_ZIP}"
+  aws s3 cp "${REMOTE_ZIP}" "${ZIP}" || die "Failed to download ${REMOTE_ZIP}"
+fi
+[[ -f "${ZIP}" ]] || die "frontend.zip not found"
 
 log "Deploying artifact version ${ARTIFACT_VERSION} to ${ENVIRONMENT}"
 unzip -q -o "${ZIP}" -d "${SITE}"

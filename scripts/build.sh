@@ -52,6 +52,7 @@ if [[ -n "${ARTIFACT_BUCKET:-}" ]]; then
   log "Uploading ${DEST}"
   aws s3 cp artifacts/frontend.zip "${DEST}/frontend.zip"
   aws s3 cp artifacts/revision.txt "${DEST}/revision.txt"
+  aws s3 cp artifacts/revision.txt "s3://${ARTIFACT_BUCKET}/revisions/latest.txt"
 fi
 
 export ARTIFACT_VERSION
