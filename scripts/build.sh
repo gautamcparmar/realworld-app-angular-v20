@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Production build and zip a revision for the pipeline artifact bucket.
 #
-# Required: ENVIRONMENT (stage|production), SSM_BASE_PATH (no trailing slash)
+# Required: ENVIRONMENT (stage|production), SSM_BASE_PATH (no trailing slash), PIPELINE_EXEC_ID
 # SSM parameters:
 #   ${SSM_BASE_PATH}/shared/artifacts/bucket
 #   ${SSM_BASE_PATH}/${ENVIRONMENT}/domain_name
@@ -27,8 +27,10 @@ ssm_get() {
 
 need_env ENVIRONMENT
 need_env SSM_BASE_PATH
+need_env PIPELINE_EXEC_ID
 [[ "${ENVIRONMENT}" == "stage" || "${ENVIRONMENT}" == "production" ]] \
   || die "ENVIRONMENT must be 'stage' or 'production'"
+[[ "${PIPELINE_EXEC_ID}" =~ ^[A-Za-z0-9._-]+$ ]] || die "Invalid PIPELINE_EXEC_ID: ${PIPELINE_EXEC_ID}"
 
 command -v aws >/dev/null 2>&1 || die "Missing command: aws"
 command -v npx >/dev/null 2>&1 || die "Missing command: npx"
@@ -97,10 +99,10 @@ rm -f artifacts/frontend.zip
 printf '%s\n' "${ARTIFACT_VERSION}" > artifacts/revision.txt
 
 DEST="s3://${ARTIFACT_BUCKET}/realworld-frontend/revisions/${ARTIFACT_VERSION}"
+DEST_EXECUTION="s3://${ARTIFACT_BUCKET}/realworld-frontend/executions/${PIPELINE_EXEC_ID}"
 log "Uploading ${DEST}"
 aws s3 cp artifacts/frontend.zip "${DEST}/frontend.zip"
-aws s3 cp artifacts/revision.txt "${DEST}/revision.txt"
-aws s3 cp artifacts/revision.txt "s3://${ARTIFACT_BUCKET}/realworld-frontend/revisions/latest.txt"
+aws s3 cp artifacts/revision.txt "${DEST_EXECUTION}/revision.txt"
 
 export ARTIFACT_VERSION
 log "Build complete (artifact version ${ARTIFACT_VERSION})"

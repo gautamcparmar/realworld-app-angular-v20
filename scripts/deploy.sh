@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Deploy a zipped artifact: S3 version prefix + CloudFront origin path + invalidation.
 #
-# Required: ENVIRONMENT (stage|production), SSM_BASE_PATH (no trailing slash)
-# Optional: ARTIFACT_VERSION, ARTIFACT_PATH, CLOUDFRONT_ORIGIN_ID,
+# Required: ENVIRONMENT (stage|production), SSM_BASE_PATH (no trailing slash),
+#           PIPELINE_EXEC_ID
+# Optional: ARTIFACT_PATH, CLOUDFRONT_ORIGIN_ID,
 #           WAIT_FOR_DISTRIBUTION (default true), WAIT_FOR_INVALIDATION (true on production)
 #
 # SSM parameters:
@@ -33,6 +34,7 @@ need_cmd jq
 need_cmd unzip
 need_env ENVIRONMENT
 need_env SSM_BASE_PATH
+need_env PIPELINE_EXEC_ID
 
 [[ "${ENVIRONMENT}" == "stage" || "${ENVIRONMENT}" == "production" ]] \
   || die "ENVIRONMENT must be 'stage' or 'production'"
@@ -47,15 +49,13 @@ if [[ "${ENVIRONMENT}" == "production" ]]; then
   WAIT_FOR_INVALIDATION="${WAIT_FOR_INVALIDATION:-true}"
 fi
 
-if [[ -z "${ARTIFACT_VERSION:-}" && -f "${ROOT}/artifacts/revision.txt" ]]; then
-  ARTIFACT_VERSION="$(tr -d '[:space:]' < "${ROOT}/artifacts/revision.txt")"
-fi
-if [[ -z "${ARTIFACT_VERSION:-}" ]]; then
-  ARTIFACT_VERSION="$(aws s3 cp "s3://${ARTIFACT_BUCKET}/realworld-frontend/revisions/latest.txt" - 2>/dev/null | tr -d '[:space:]')" \
-    || die "ARTIFACT_VERSION is not set and s3://${ARTIFACT_BUCKET}/realworld-frontend/revisions/latest.txt was not found"
-fi
-[[ -n "${ARTIFACT_VERSION}" ]] || die "ARTIFACT_VERSION is required"
+[[ "${PIPELINE_EXEC_ID}" =~ ^[A-Za-z0-9._-]+$ ]] || die "Invalid PIPELINE_EXEC_ID: ${PIPELINE_EXEC_ID}"
+REVISION_KEY="s3://${ARTIFACT_BUCKET}/realworld-frontend/executions/${PIPELINE_EXEC_ID}/revision.txt"
+ARTIFACT_VERSION="$(aws s3 cp "${REVISION_KEY}" - 2>/dev/null | tr -d '[:space:]')" \
+  || die "Failed to read ARTIFACT_VERSION from ${REVISION_KEY}"
+[[ -n "${ARTIFACT_VERSION}" ]] || die "${REVISION_KEY} is empty"
 [[ "${ARTIFACT_VERSION}" =~ ^[A-Za-z0-9._-]+$ ]] || die "Invalid ARTIFACT_VERSION: ${ARTIFACT_VERSION}"
+log "Using ARTIFACT_VERSION=${ARTIFACT_VERSION} from ${REVISION_KEY}"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "${WORK}"' EXIT
