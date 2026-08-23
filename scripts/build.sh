@@ -46,6 +46,15 @@ rm -f artifacts/frontend.zip
 ( cd "${DIST}" && zip -r -q "${ROOT}/artifacts/frontend.zip" . )
 printf '%s\n' "${ARTIFACT_VERSION}" > artifacts/revision.txt
 
+if [[ -n "${SSM_BASE_PATH:-}" ]]; then
+  command -v aws >/dev/null 2>&1 || die "Missing command: aws"
+  SSM_BASE_PATH="${SSM_BASE_PATH%/}"
+  ARTIFACT_BUCKET="$(aws ssm get-parameter --name "${SSM_BASE_PATH}/shared/artifacts/bucket" --with-decryption --query 'Parameter.Value' --output text)" \
+    || die "Failed to read SSM parameter ${SSM_BASE_PATH}/shared/artifacts/bucket"
+  [[ -n "${ARTIFACT_BUCKET}" && "${ARTIFACT_BUCKET}" != "None" ]] \
+    || die "SSM parameter ${SSM_BASE_PATH}/shared/artifacts/bucket is empty"
+fi
+
 if [[ -n "${ARTIFACT_BUCKET:-}" ]]; then
   command -v aws >/dev/null 2>&1 || die "Missing command: aws"
   DEST="s3://${ARTIFACT_BUCKET}/revisions/${ARTIFACT_VERSION}"

@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Deploy a zipped artifact: S3 version prefix + CloudFront origin path + invalidation.
 #
-# Required: ENVIRONMENT (stage|production), SSM_BASE_PATH (no trailing slash), ARTIFACT_BUCKET
+# Required: ENVIRONMENT (stage|production), SSM_BASE_PATH (no trailing slash)
 # Optional: ARTIFACT_VERSION, ARTIFACT_PATH, CLOUDFRONT_ORIGIN_ID,
 #           WAIT_FOR_DISTRIBUTION (default true), WAIT_FOR_INVALIDATION (true on production)
 #
 # SSM parameters:
+#   ${SSM_BASE_PATH}/shared/artifacts/bucket
 #   ${SSM_BASE_PATH}/${ENVIRONMENT}/frontend/bucket
 #   ${SSM_BASE_PATH}/${ENVIRONMENT}/cloudfront/distribution-id
 set -euo pipefail
@@ -32,15 +33,15 @@ need_cmd jq
 need_cmd unzip
 need_env ENVIRONMENT
 need_env SSM_BASE_PATH
-need_env ARTIFACT_BUCKET
 
 [[ "${ENVIRONMENT}" == "stage" || "${ENVIRONMENT}" == "production" ]] \
   || die "ENVIRONMENT must be 'stage' or 'production'"
 
 SSM_BASE_PATH="${SSM_BASE_PATH%/}"
+ARTIFACT_BUCKET="$(ssm_get "${SSM_BASE_PATH}/shared/artifacts/bucket")"
 HOSTING_BUCKET="$(ssm_get "${SSM_BASE_PATH}/${ENVIRONMENT}/frontend/bucket")"
 CLOUDFRONT_DISTRIBUTION_ID="$(ssm_get "${SSM_BASE_PATH}/${ENVIRONMENT}/cloudfront/distribution-id")"
-log "Loaded HOSTING_BUCKET=${HOSTING_BUCKET} and CLOUDFRONT_DISTRIBUTION_ID=${CLOUDFRONT_DISTRIBUTION_ID} from SSM"
+log "Loaded ARTIFACT_BUCKET=${ARTIFACT_BUCKET}, HOSTING_BUCKET=${HOSTING_BUCKET}, CLOUDFRONT_DISTRIBUTION_ID=${CLOUDFRONT_DISTRIBUTION_ID} from SSM"
 
 if [[ "${ENVIRONMENT}" == "production" ]]; then
   WAIT_FOR_INVALIDATION="${WAIT_FOR_INVALIDATION:-true}"
