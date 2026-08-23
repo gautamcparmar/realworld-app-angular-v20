@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Deploy a zipped artifact: S3 version prefix + CloudFront origin path + invalidation.
 #
-# Required: HOSTING_BUCKET, CLOUDFRONT_DISTRIBUTION_ID
-# Optional: ARTIFACT_VERSION, ARTIFACT_PATH, CLOUDFRONT_ORIGIN_ID, WAIT_FOR_DISTRIBUTION (default true)
+# Required: ENVIRONMENT (stage|production), HOSTING_BUCKET, CLOUDFRONT_DISTRIBUTION_ID
+# Optional: ARTIFACT_VERSION, ARTIFACT_PATH, CLOUDFRONT_ORIGIN_ID,
+#           WAIT_FOR_DISTRIBUTION (default true), WAIT_FOR_INVALIDATION (true on production)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,8 +17,16 @@ need_env() { [[ -n "${!1:-}" ]] || die "Required environment variable is not set
 need_cmd aws
 need_cmd jq
 need_cmd unzip
+need_env ENVIRONMENT
 need_env HOSTING_BUCKET
 need_env CLOUDFRONT_DISTRIBUTION_ID
+
+[[ "${ENVIRONMENT}" == "stage" || "${ENVIRONMENT}" == "production" ]] \
+  || die "ENVIRONMENT must be 'stage' or 'production'"
+
+if [[ "${ENVIRONMENT}" == "production" ]]; then
+  WAIT_FOR_INVALIDATION="${WAIT_FOR_INVALIDATION:-true}"
+fi
 
 ZIP="${ARTIFACT_PATH:-${ROOT}/artifacts/frontend.zip}"
 [[ -f "${ZIP}" ]] || ZIP="${ROOT}/frontend.zip"
@@ -37,7 +46,7 @@ trap 'rm -rf "${WORK}"' EXIT
 SITE="${WORK}/site"
 mkdir -p "${SITE}"
 
-log "Deploying artifact version ${ARTIFACT_VERSION}"
+log "Deploying artifact version ${ARTIFACT_VERSION} to ${ENVIRONMENT}"
 unzip -q -o "${ZIP}" -d "${SITE}"
 [[ -f "${SITE}/index.html" ]] || die "Artifact does not contain index.html"
 
@@ -83,15 +92,25 @@ for attempt in 1 2 3 4 5; do
 done
 [[ "${ok}" -eq 1 ]] || die "Failed to update CloudFront distribution"
 
-aws cloudfront create-invalidation \
-  --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
-  --paths "${CLOUDFRONT_INVALIDATION_PATHS:-/*}" \
-  --output json >/dev/null
-log "Created CloudFront invalidation"
+INVALIDATION_ID="$(
+  aws cloudfront create-invalidation \
+    --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
+    --paths "${CLOUDFRONT_INVALIDATION_PATHS:-/*}" \
+    --query 'Invalidation.Id' \
+    --output text
+)"
+log "Created CloudFront invalidation ${INVALIDATION_ID}"
 
 if [[ "${WAIT_FOR_DISTRIBUTION:-true}" == "true" ]]; then
   log "Waiting for CloudFront deployment"
   aws cloudfront wait distribution-deployed --id "${CLOUDFRONT_DISTRIBUTION_ID}"
 fi
 
-log "Deploy complete (artifact version ${ARTIFACT_VERSION})"
+if [[ "${WAIT_FOR_INVALIDATION:-false}" == "true" ]]; then
+  log "Waiting for CloudFront invalidation ${INVALIDATION_ID}"
+  aws cloudfront wait invalidation-completed \
+    --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
+    --id "${INVALIDATION_ID}"
+fi
+
+log "Deploy to ${ENVIRONMENT} complete (artifact version ${ARTIFACT_VERSION})"

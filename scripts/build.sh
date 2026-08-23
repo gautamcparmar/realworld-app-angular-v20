@@ -30,16 +30,16 @@ npx ng build --configuration production
 DIST="${DIST_DIR:-dist/realworld-app/browser}"
 [[ -f "${DIST}/index.html" ]] || die "Build output not found at ${DIST}"
 
-ARTIFACT_VERSION="${ARTIFACT_VERSION:-}"
-if [[ -z "${ARTIFACT_VERSION}" ]]; then
-  SHA="$(git rev-parse --short=7 HEAD 2>/dev/null || true)"
-  if [[ -n "${CODEBUILD_BUILD_NUMBER:-}" && -n "${SHA}" ]]; then
-    ARTIFACT_VERSION="${CODEBUILD_BUILD_NUMBER}-${SHA}"
-  else
-    ARTIFACT_VERSION="${SHA:-$(date -u +'%Y%m%d%H%M%S')}"
-  fi
+command -v node >/dev/null 2>&1 || die "Missing command: node"
+PKG_VERSION="$(node -p "require('./package.json').version")"
+[[ -n "${PKG_VERSION}" && "${PKG_VERSION}" != "undefined" ]] || die "package.json version is missing"
+
+if [[ -n "${CODEBUILD_BUILD_ID:-}" && -z "${CODEBUILD_BUILD_NUMBER:-}" ]]; then
+  die "CODEBUILD_BUILD_NUMBER is required"
 fi
-[[ "${ARTIFACT_VERSION}" =~ ^[A-Za-z0-9._-]+$ ]] || die "Invalid revision: ${ARTIFACT_VERSION}"
+
+ARTIFACT_VERSION="${PKG_VERSION}.${CODEBUILD_BUILD_NUMBER:-0}"
+[[ "${ARTIFACT_VERSION}" =~ ^[A-Za-z0-9._-]+$ ]] || die "Invalid ARTIFACT_VERSION: ${ARTIFACT_VERSION}"
 
 mkdir -p artifacts
 rm -f artifacts/frontend.zip
@@ -55,4 +55,4 @@ if [[ -n "${ARTIFACT_BUCKET:-}" ]]; then
 fi
 
 export ARTIFACT_VERSION
-log "Build complete (revision ${ARTIFACT_VERSION})"
+log "Build complete (artifact version ${ARTIFACT_VERSION})"

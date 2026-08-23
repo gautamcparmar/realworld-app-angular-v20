@@ -1,10 +1,45 @@
 version: 0.2
 
+# Continuous delivery deploy spec. The same file (and the same frontend.zip)
+# is used for Stage and Production. Terraform / CodePipeline must:
+#   1. Deploy Stage with ENVIRONMENT=stage (automatic after Build)
+#   2. Manual email approval
+#   3. Deploy Production with ENVIRONMENT=production (same artifact)
+#
+# Required action environment variables:
+#   ENVIRONMENT                 stage | production
+#   HOSTING_BUCKET              environment static-hosting bucket
+#   CLOUDFRONT_DISTRIBUTION_ID  environment CloudFront distribution
+#   ARTIFACT_VERSION            from Build (#{BuildVariables.ARTIFACT_VERSION})
+# Optional:
+#   ARTIFACT_PATH, CLOUDFRONT_ORIGIN_ID, WAIT_FOR_DISTRIBUTION, WAIT_FOR_INVALIDATION
+
 env:
   variables:
     WAIT_FOR_DISTRIBUTION: "true"
+    WAIT_FOR_INVALIDATION: "false"
+  exported-variables:
+    - ARTIFACT_VERSION
+    - ENVIRONMENT
 
 phases:
+  install:
+    commands:
+      - |
+        if ! command -v unzip >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+          if command -v apt-get >/dev/null 2>&1; then
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -y
+            apt-get install -y --no-install-recommends unzip jq
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y unzip jq
+          elif command -v yum >/dev/null 2>&1; then
+            yum install -y unzip jq
+          fi
+        fi
   build:
     commands:
       - bash scripts/deploy.sh
+  post_build:
+    commands:
+      - echo "Deploy to ${ENVIRONMENT} complete for artifact ${ARTIFACT_VERSION}"
