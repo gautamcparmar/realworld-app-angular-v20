@@ -96,11 +96,11 @@ rm -f artifacts/frontend.zip
 ( cd "${DIST}" && zip -r -q "${ROOT}/artifacts/frontend.zip" . )
 printf '%s\n' "${ARTIFACT_VERSION}" > artifacts/revision.txt
 
-DEST="s3://${ARTIFACT_BUCKET}/revisions/${ARTIFACT_VERSION}"
+DEST="s3://${ARTIFACT_BUCKET}/realworld-frontend/revisions/${ARTIFACT_VERSION}"
 log "Uploading ${DEST}"
 aws s3 cp artifacts/frontend.zip "${DEST}/frontend.zip"
 aws s3 cp artifacts/revision.txt "${DEST}/revision.txt"
-aws s3 cp artifacts/revision.txt "s3://${ARTIFACT_BUCKET}/revisions/latest.txt"
+aws s3 cp artifacts/revision.txt "s3://${ARTIFACT_BUCKET}/realworld-frontend/revisions/latest.txt"
 
 export ARTIFACT_VERSION
 log "Build complete (artifact version ${ARTIFACT_VERSION})"

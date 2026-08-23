@@ -51,8 +51,8 @@ if [[ -z "${ARTIFACT_VERSION:-}" && -f "${ROOT}/artifacts/revision.txt" ]]; then
   ARTIFACT_VERSION="$(tr -d '[:space:]' < "${ROOT}/artifacts/revision.txt")"
 fi
 if [[ -z "${ARTIFACT_VERSION:-}" ]]; then
-  ARTIFACT_VERSION="$(aws s3 cp "s3://${ARTIFACT_BUCKET}/revisions/latest.txt" - 2>/dev/null | tr -d '[:space:]')" \
-    || die "ARTIFACT_VERSION is not set and s3://${ARTIFACT_BUCKET}/revisions/latest.txt was not found"
+  ARTIFACT_VERSION="$(aws s3 cp "s3://${ARTIFACT_BUCKET}/realworld-frontend/revisions/latest.txt" - 2>/dev/null | tr -d '[:space:]')" \
+    || die "ARTIFACT_VERSION is not set and s3://${ARTIFACT_BUCKET}/realworld-frontend/revisions/latest.txt was not found"
 fi
 [[ -n "${ARTIFACT_VERSION}" ]] || die "ARTIFACT_VERSION is required"
 [[ "${ARTIFACT_VERSION}" =~ ^[A-Za-z0-9._-]+$ ]] || die "Invalid ARTIFACT_VERSION: ${ARTIFACT_VERSION}"
@@ -66,7 +66,7 @@ mkdir -p "${SITE}"
 if [[ -n "${ARTIFACT_PATH:-}" && -f "${ARTIFACT_PATH}" ]]; then
   cp "${ARTIFACT_PATH}" "${ZIP}"
 else
-  REMOTE_ZIP="s3://${ARTIFACT_BUCKET}/revisions/${ARTIFACT_VERSION}/frontend.zip"
+  REMOTE_ZIP="s3://${ARTIFACT_BUCKET}/realworld-frontend/revisions/${ARTIFACT_VERSION}/frontend.zip"
   log "Downloading ${REMOTE_ZIP}"
   aws s3 cp "${REMOTE_ZIP}" "${ZIP}" || die "Failed to download ${REMOTE_ZIP}"
 fi
