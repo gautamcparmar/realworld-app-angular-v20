@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Deploy a zipped artifact: S3 version prefix + CloudFront origin path + invalidation.
 #
-# Required: ENVIRONMENT (stage|production), HOSTING_BUCKET, CLOUDFRONT_DISTRIBUTION_ID
+# Required: ENVIRONMENT (stage|production), SSM_BASE_PATH (no trailing slash)
 # Optional: ARTIFACT_VERSION, ARTIFACT_PATH, CLOUDFRONT_ORIGIN_ID,
 #           WAIT_FOR_DISTRIBUTION (default true), WAIT_FOR_INVALIDATION (true on production)
+#
+# SSM parameters:
+#   ${SSM_BASE_PATH}/${ENVIRONMENT}/frontend/bucket
+#   ${SSM_BASE_PATH}/${ENVIRONMENT}/cloudfront/distribution-id
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,15 +18,28 @@ die() { log "ERROR: $*" >&2; exit 1; }
 need_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing command: $1"; }
 need_env() { [[ -n "${!1:-}" ]] || die "Required environment variable is not set: $1"; }
 
+ssm_get() {
+  local name="$1"
+  local value
+  value="$(aws ssm get-parameter --name "${name}" --with-decryption --query 'Parameter.Value' --output text 2>/dev/null)" \
+    || die "Failed to read SSM parameter ${name}"
+  [[ -n "${value}" && "${value}" != "None" ]] || die "SSM parameter ${name} is empty"
+  printf '%s\n' "${value}"
+}
+
 need_cmd aws
 need_cmd jq
 need_cmd unzip
 need_env ENVIRONMENT
-need_env HOSTING_BUCKET
-need_env CLOUDFRONT_DISTRIBUTION_ID
+need_env SSM_BASE_PATH
 
 [[ "${ENVIRONMENT}" == "stage" || "${ENVIRONMENT}" == "production" ]] \
   || die "ENVIRONMENT must be 'stage' or 'production'"
+
+SSM_BASE_PATH="${SSM_BASE_PATH%/}"
+HOSTING_BUCKET="$(ssm_get "${SSM_BASE_PATH}/${ENVIRONMENT}/frontend/bucket")"
+CLOUDFRONT_DISTRIBUTION_ID="$(ssm_get "${SSM_BASE_PATH}/${ENVIRONMENT}/cloudfront/distribution-id")"
+log "Loaded HOSTING_BUCKET=${HOSTING_BUCKET} and CLOUDFRONT_DISTRIBUTION_ID=${CLOUDFRONT_DISTRIBUTION_ID} from SSM"
 
 if [[ "${ENVIRONMENT}" == "production" ]]; then
   WAIT_FOR_INVALIDATION="${WAIT_FOR_INVALIDATION:-true}"

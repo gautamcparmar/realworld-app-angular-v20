@@ -8,9 +8,11 @@ version: 0.2
 #
 # Required action environment variables:
 #   ENVIRONMENT                 stage | production
-#   HOSTING_BUCKET              environment static-hosting bucket
-#   CLOUDFRONT_DISTRIBUTION_ID  environment CloudFront distribution
+#   SSM_BASE_PATH               SSM prefix with no trailing slash
 #   ARTIFACT_VERSION            from Build (#{BuildVariables.ARTIFACT_VERSION})
+# HOSTING_BUCKET and CLOUDFRONT_DISTRIBUTION_ID are read from:
+#   ${SSM_BASE_PATH}/${ENVIRONMENT}/frontend/bucket
+#   ${SSM_BASE_PATH}/${ENVIRONMENT}/cloudfront/distribution-id
 # Optional:
 #   ARTIFACT_PATH, CLOUDFRONT_ORIGIN_ID, WAIT_FOR_DISTRIBUTION, WAIT_FOR_INVALIDATION
 
