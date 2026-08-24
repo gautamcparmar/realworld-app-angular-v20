@@ -84,13 +84,17 @@ log "Deploying artifact version ${ARTIFACT_VERSION} to ${ENVIRONMENT}"
 unzip -q -o "${ZIP}" -d "${SITE}"
 [[ -f "${SITE}/index.html" ]] || die "Artifact does not contain index.html"
 
+placeholder='http://localhost:3000'
 updated=0
-while IFS= read -r -d '' file; do
-  if grep -Fq "http://localhost:3000" "${file}"; then
-    sed -i "s|http://localhost:3000|${API_ORIGIN}|g" "${file}"
-    updated=$((updated + 1))
-  fi
-done < <(find "${SITE}" -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.html' -o -name '*.json' -o -name '*.css' -o -name '*.map' \) -print0)
+while IFS= read -r file; do
+  [[ -f "${file}" ]] || continue
+  content=$(cat "${file}"; printf x)
+  content="${content%x}"
+  [[ "${content}" == *"${placeholder}"* ]] || continue
+  printf '%s' "${content//${placeholder}/${API_ORIGIN}}" > "${file}.tmp"
+  mv "${file}.tmp" "${file}"
+  updated=$((updated + 1))
+done < <(find "${SITE}" -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.html' -o -name '*.json' -o -name '*.css' -o -name '*.map' \))
 [[ "${updated}" -gt 0 ]] || die "http://localhost:3000 not found in the artifact; rebuild so the API URL placeholder is present"
 log "Rewrote API origin to ${API_ORIGIN} in ${updated} file(s)"
 
