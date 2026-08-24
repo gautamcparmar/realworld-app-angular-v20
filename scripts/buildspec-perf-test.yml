@@ -1,0 +1,11 @@
+version: 0.2
+
+env:
+  variables:
+    ENVIRONMENT: stage
+    CI: "true"
+
+phases:
+  build:
+    commands:
+      - bash scripts/perf-test/run.sh
