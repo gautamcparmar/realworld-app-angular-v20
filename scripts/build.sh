@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Production build and zip a revision for the pipeline artifact bucket.
 #
-# Required: ENVIRONMENT (stage|production), SSM_BASE_PATH (no trailing slash), PIPELINE_EXEC_ID
+# Required: SSM_BASE_PATH (no trailing slash), PIPELINE_EXEC_ID
 # SSM parameters:
 #   ${SSM_BASE_PATH}/shared/artifacts/bucket
-#   ${SSM_BASE_PATH}/${ENVIRONMENT}/domain_name
+# The API host is not baked in here; deploy.sh replaces http://localhost:3000
+# with https://${DOMAIN_NAME} for the target environment.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -25,11 +26,8 @@ ssm_get() {
   printf '%s\n' "${value}"
 }
 
-need_env ENVIRONMENT
 need_env SSM_BASE_PATH
 need_env PIPELINE_EXEC_ID
-[[ "${ENVIRONMENT}" == "stage" || "${ENVIRONMENT}" == "production" ]] \
-  || die "ENVIRONMENT must be 'stage' or 'production'"
 [[ "${PIPELINE_EXEC_ID}" =~ ^[A-Za-z0-9._-]+$ ]] || die "Invalid PIPELINE_EXEC_ID: ${PIPELINE_EXEC_ID}"
 
 command -v aws >/dev/null 2>&1 || die "Missing command: aws"
@@ -51,31 +49,6 @@ fi
 
 SSM_BASE_PATH="${SSM_BASE_PATH%/}"
 ARTIFACT_BUCKET="$(ssm_get "${SSM_BASE_PATH}/shared/artifacts/bucket")"
-DOMAIN_NAME="$(ssm_get "${SSM_BASE_PATH}/${ENVIRONMENT}/domain_name")"
-DOMAIN_NAME="${DOMAIN_NAME#http://}"
-DOMAIN_NAME="${DOMAIN_NAME#https://}"
-DOMAIN_NAME="${DOMAIN_NAME%/}"
-[[ -n "${DOMAIN_NAME}" ]] || die "domain_name SSM parameter is empty"
-API_ORIGIN="https://${DOMAIN_NAME}"
-log "Using API origin ${API_ORIGIN} for ${ENVIRONMENT}"
-
-ENV_DIR="${ROOT}/src/environments"
-restore_environments() {
-  local bak
-  for bak in "${ENV_DIR}"/*.ts.buildbak; do
-    [[ -f "${bak}" ]] || continue
-    mv "${bak}" "${bak%.buildbak}"
-  done
-}
-trap restore_environments EXIT
-
-shopt -s nullglob
-for env_file in "${ENV_DIR}"/*.ts; do
-  cp "${env_file}" "${env_file}.buildbak"
-  sed "s|http://localhost:3000|${API_ORIGIN}|g" "${env_file}.buildbak" > "${env_file}"
-  log "Updated ${env_file}"
-done
-shopt -u nullglob
 
 log "Build"
 npx ng build --configuration production

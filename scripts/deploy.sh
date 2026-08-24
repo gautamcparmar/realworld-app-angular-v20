@@ -10,6 +10,7 @@
 #   ${SSM_BASE_PATH}/shared/artifacts/bucket
 #   ${SSM_BASE_PATH}/${ENVIRONMENT}/frontend/bucket
 #   ${SSM_BASE_PATH}/${ENVIRONMENT}/cloudfront/distribution-id
+#   ${SSM_BASE_PATH}/${ENVIRONMENT}/domain_name
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,7 +44,14 @@ SSM_BASE_PATH="${SSM_BASE_PATH%/}"
 ARTIFACT_BUCKET="$(ssm_get "${SSM_BASE_PATH}/shared/artifacts/bucket")"
 HOSTING_BUCKET="$(ssm_get "${SSM_BASE_PATH}/${ENVIRONMENT}/frontend/bucket")"
 CLOUDFRONT_DISTRIBUTION_ID="$(ssm_get "${SSM_BASE_PATH}/${ENVIRONMENT}/cloudfront/distribution-id")"
+DOMAIN_NAME="$(ssm_get "${SSM_BASE_PATH}/${ENVIRONMENT}/domain_name")"
+DOMAIN_NAME="${DOMAIN_NAME#http://}"
+DOMAIN_NAME="${DOMAIN_NAME#https://}"
+DOMAIN_NAME="${DOMAIN_NAME%/}"
+[[ -n "${DOMAIN_NAME}" ]] || die "domain_name SSM parameter is empty"
+API_ORIGIN="https://${DOMAIN_NAME}"
 log "Loaded ARTIFACT_BUCKET=${ARTIFACT_BUCKET}, HOSTING_BUCKET=${HOSTING_BUCKET}, CLOUDFRONT_DISTRIBUTION_ID=${CLOUDFRONT_DISTRIBUTION_ID} from SSM"
+log "Using API origin ${API_ORIGIN} for ${ENVIRONMENT}"
 
 if [[ "${ENVIRONMENT}" == "production" ]]; then
   WAIT_FOR_INVALIDATION="${WAIT_FOR_INVALIDATION:-true}"
@@ -75,6 +83,16 @@ fi
 log "Deploying artifact version ${ARTIFACT_VERSION} to ${ENVIRONMENT}"
 unzip -q -o "${ZIP}" -d "${SITE}"
 [[ -f "${SITE}/index.html" ]] || die "Artifact does not contain index.html"
+
+updated=0
+while IFS= read -r -d '' file; do
+  if grep -Fq "http://localhost:3000" "${file}"; then
+    sed -i "s|http://localhost:3000|${API_ORIGIN}|g" "${file}"
+    updated=$((updated + 1))
+  fi
+done < <(find "${SITE}" -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.html' -o -name '*.json' -o -name '*.css' -o -name '*.map' \) -print0)
+[[ "${updated}" -gt 0 ]] || die "http://localhost:3000 not found in the artifact; rebuild so the API URL placeholder is present"
+log "Rewrote API origin to ${API_ORIGIN} in ${updated} file(s)"
 
 DEST="s3://${HOSTING_BUCKET}/${ARTIFACT_VERSION}"
 log "Syncing ${DEST}/"
