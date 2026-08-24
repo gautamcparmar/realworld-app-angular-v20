@@ -139,4 +139,7 @@ fi
 if [[ "${COMPARE_STATUS}" -eq 1 ]]; then
   die "Performance regression vs staging baseline; not promoting to production approval"
 fi
+if [[ "${COMPARE_STATUS}" -ne 0 && "${COMPARE_STATUS}" -ne 2 ]]; then
+  die "Performance comparison failed (exit ${COMPARE_STATUS})"
+fi
 log "Performance test passed"

@@ -24,6 +24,22 @@ def number(values: dict[str, Any], key: str) -> float:
     return float(values[key])
 
 
+def fail_rate(summary: dict[str, Any]) -> float:
+    values = metric_values(summary, "http_req_failed")
+    for key in ("rate", "value"):
+        if values.get(key) is not None:
+            return float(values[key])
+    passes = values.get("passes")
+    fails = values.get("fails")
+    if passes is not None and fails is not None:
+        total = float(passes) + float(fails)
+        return 0.0 if total == 0 else float(passes) / total
+    raise SystemExit(
+        "http_req_failed rate is missing "
+        f"(keys: {sorted(str(key) for key in values)})"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--current", required=True)
@@ -46,8 +62,8 @@ def main() -> int:
     baseline_p95 = number(metric_values(baseline, "http_req_duration"), "p(95)")
     current_p99 = number(metric_values(current, "http_req_duration"), "p(99)")
     baseline_p99 = number(metric_values(baseline, "http_req_duration"), "p(99)")
-    current_fail = number(metric_values(current, "http_req_failed"), "rate")
-    baseline_fail = number(metric_values(baseline, "http_req_failed"), "rate")
+    current_fail = fail_rate(current)
+    baseline_fail = fail_rate(baseline)
 
     limit = 1 + args.percent / 100
     failed = False
